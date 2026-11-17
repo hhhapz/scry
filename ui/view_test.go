@@ -171,7 +171,7 @@ func TestDeviceNames(t *testing.T) {
 }
 
 func TestBitRateStops(t *testing.T) {
-	var o scrcpy.Options // 8M: stop 2 of 0..5, value 0.4
+	var o scrcpy.Options        // 8M: stop 2 of 0..5, value 0.4
 	setBitRate(&o, 0.45, false) // one key press right
 	if o.BitRate != 16_000_000 {
 		t.Fatalf("key right from 8M: %d", o.BitRate)
