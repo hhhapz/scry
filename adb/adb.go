@@ -14,8 +14,11 @@ type Device struct {
 	Model  string // "SM_X910"
 }
 
-// Wireless reports whether the device is connected over TCP/IP.
-func (d Device) Wireless() bool { return strings.Contains(d.Serial, ":") }
+// Wireless reports whether the device is connected over TCP/IP: an
+// address, or an mDNS name adb connected to by itself.
+func (d Device) Wireless() bool {
+	return strings.Contains(d.Serial, ":") || strings.Contains(d.Serial, "._adb-tls-connect.")
+}
 
 // Name is what to show: the model with underscores as spaces, or the serial.
 func (d Device) Name() string {

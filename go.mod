@@ -7,6 +7,8 @@ require (
 	github.com/hhhapz/giokit v0.0.0
 )
 
+require rsc.io/qr v0.2.0
+
 require (
 	gioui.org/shader v1.0.9 // indirect
 	gioui.org/x v0.10.3 // indirect

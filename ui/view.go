@@ -49,7 +49,8 @@ type View struct {
 	nav      kit.Pool[kit.Clickable]
 	navGroup kit.FocusGroup
 	refresh  kit.Clickable
-	add      kit.Clickable
+	addBtn   kit.Clickable
+	add      addDevice
 	start    kit.Clickable
 	kind     ui.TabsState
 	kindSel  ui.SelectState // replaces the tabs when they do not fit
@@ -80,8 +81,10 @@ func New(app *kit.App) *View {
 	v.scroll.Axis = layout.Vertical
 	v.logs.init()
 	v.screen.init()
+	v.add.init()
 	if app != nil {
 		v.Refresh()
+		v.trackDevices()
 	}
 	return v
 }
@@ -249,9 +252,7 @@ func (v *View) handle(gtx C) {
 	if v.refresh.Clicked(gtx) {
 		v.Refresh()
 	}
-	if v.add.Clicked(gtx) {
-		v.toasts.Push(kit.StatusInfo, "Pairing comes next", "QR and code pairing are not built yet.")
-	}
+	v.handleAddDevice(gtx)
 	if v.device() == nil {
 		return
 	}
@@ -349,6 +350,14 @@ func (v *View) toggleSession() {
 func (v *View) layout(gtx C) D {
 	th := v.Theme
 	return ui.ToastHost{Page: func(gtx C) D {
+		return th.Modal(gtx, &v.add.dialog, "add-dialog", v.window, v.addDeviceDialog)
+	}}.Layout(gtx, th, &v.toasts)
+}
+
+// window is everything under the dialogs.
+func (v *View) window(gtx C) D {
+	th := v.Theme
+	{
 		return kit.Fill(gtx, th.Bg, func(gtx C) D {
 			gtx.Constraints.Min = gtx.Constraints.Max
 			return kit.Col(gtx,
@@ -371,7 +380,7 @@ func (v *View) layout(gtx C) D {
 				}),
 			)
 		})
-	}}.Layout(gtx, th, &v.toasts)
+	}
 }
 
 func (v *View) sidebar(gtx C) D {
@@ -415,7 +424,7 @@ func (v *View) sidebar(gtx C) D {
 			kit.Flexed(1, kit.Grow),
 			kit.Rigid(func(gtx C) D {
 				gtx.Constraints.Min.X = gtx.Constraints.Max.X
-				return ui.Button{ID: "add-device", Text: "Add device", Icon: kit.IconPlus}.Layout(gtx, th, &v.add)
+				return ui.Button{ID: "add-device", Text: "Add device", Icon: kit.IconPlus}.Layout(gtx, th, &v.addBtn)
 			}),
 		)
 	})
@@ -486,6 +495,16 @@ func (v *View) header(gtx C, d *adb.Device) D {
 					kit.Rigid(func(gtx C) D { return v.deviceLine(gtx, *d) }),
 				)
 			}),
+			kit.Rigid(func(gtx C) D {
+				switch {
+				case v.isDemo(d.Serial) || d.State != "device":
+					return D{}
+				case d.Wireless():
+					return ui.Button{ID: "disconnect", Text: "Disconnect", Style: ui.Ghost, Size: kit.ControlSmall}.Layout(gtx, th, &v.add.disconnect)
+				}
+				return ui.Button{ID: "use-wifi", Text: "Use over Wi-Fi", Style: ui.Ghost, Size: kit.ControlSmall}.Layout(gtx, th, &v.add.wifi)
+			}),
+			kit.Rigid(kit.Gap(kit.Space2, 0)),
 			kit.Rigid(func(gtx C) D { return ui.Tabs{ID: "page", Labels: tabNames, Selected: v.tab}.Layout(gtx, th, &v.tabs) }),
 			kit.Rigid(kit.Gap(kit.Space4, 0)),
 			kit.Rigid(func(gtx C) D {
