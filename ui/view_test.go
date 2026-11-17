@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hhhapz/giokit/kittest"
@@ -120,4 +121,36 @@ func TestNarrowKindDropdown(t *testing.T) {
 	}
 	h.ExpectClean()
 	shot(t, h, "size-phone")
+}
+
+func TestLogs(t *testing.T) {
+	v, h := harness(t)
+	serial := fixture[0].Serial
+	for _, f := range []string{"cameras", "encoders"} {
+		data, err := os.ReadFile(filepath.Join("..", "docs", "samples", f+".txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var p scrcpy.LogParser
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			v.log(serial, p.Parse(line))
+		}
+	}
+	v.log(serial, scrcpy.LogLine{Level: scrcpy.Warn, Source: "client", Text: "Demuxer 'audio': stream explicitly disabled by the device"})
+	h.ClickID("page/Logs")
+	h.ExpectTextIn("logs", "List of video encoders:")
+	h.ClickID("log-level/field")
+	h.ClickID("log-level/2") // warnings and up
+	if n := v.logs.view.Count(v.logs.buf(serial)); n != 1 {
+		t.Fatalf("warnings: %d lines, want 1", n)
+	}
+	h.ClickID("log-level/field")
+	h.ClickID("log-level/0")
+	h.ClickID("log-filter")
+	h.Type("hevc")
+	if n := v.logs.view.Count(v.logs.buf(serial)); n != 6 {
+		t.Fatalf("filter hevc: %d lines, want 6", n)
+	}
+	h.ExpectClean()
+	shot(t, h, "logs")
 }

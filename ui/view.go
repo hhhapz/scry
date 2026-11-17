@@ -46,7 +46,10 @@ type View struct {
 	appName  widget.Editor
 	toggles  kit.Pool[kit.Clickable]
 	selects  kit.Pool[kit.Select]
-	page     kit.List
+	scroll   kit.List // settings
+	tab      int      // 0 settings, 1 logs
+	tabs     kit.Tabs
+	logs     logsPage
 	toasts   kit.Toasts
 }
 
@@ -60,7 +63,8 @@ func New(app *kit.App) *View {
 	v.kind.Style = kit.TabsSegmented
 	v.fps.Style = kit.TabsSegmented
 	v.appName.SingleLine = true
-	v.page.Axis = layout.Vertical
+	v.scroll.Axis = layout.Vertical
+	v.logs.init()
 	if app != nil {
 		v.Refresh()
 	}
@@ -144,6 +148,16 @@ func (v *View) handle(gtx C) {
 	if v.device() == nil {
 		return
 	}
+	if i, ok := v.tabs.Clicked(gtx); ok {
+		v.tab = i
+	}
+	if v.start.Clicked(gtx) {
+		v.toggleSession()
+	}
+	if v.tab == 1 {
+		v.handleLogs(gtx)
+		return
+	}
 	o := v.options()
 	if i, ok := v.kind.Clicked(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
@@ -173,9 +187,6 @@ func (v *View) handle(gtx C) {
 			}
 		}
 	}
-	if v.start.Clicked(gtx) {
-		v.toggleSession()
-	}
 }
 
 func (v *View) toggleSession() {
@@ -184,11 +195,14 @@ func (v *View) toggleSession() {
 		s.Stop()
 		return
 	}
-	s, err := scrcpy.Start(v.options().Args(serial), func(line string) {
-		v.post(func() { v.status = line })
+	args := v.options().Args(serial)
+	v.log(serial, scrcpy.LogLine{Level: scrcpy.Info, Source: "you", Text: "scrcpy " + strings.Join(args, " ")})
+	var parser scrcpy.LogParser // used on the UI goroutine only
+	s, err := scrcpy.Start(args, func(line string) {
+		v.post(func() { v.log(serial, parser.Parse(line)) })
 	})
 	if err != nil {
-		v.status = err.Error()
+		v.log(serial, scrcpy.LogLine{Level: scrcpy.Error, Source: "scry", Text: err.Error()})
 		return
 	}
 	v.sessions[serial] = s
@@ -197,7 +211,9 @@ func (v *View) toggleSession() {
 		v.post(func() {
 			delete(v.sessions, serial)
 			if err != nil {
-				v.status = "scrcpy exited: " + err.Error()
+				v.log(serial, scrcpy.LogLine{Level: scrcpy.Error, Source: "scry", Text: "scrcpy exited: " + err.Error()})
+			} else {
+				v.log(serial, scrcpy.LogLine{Level: scrcpy.Info, Source: "scry", Text: "scrcpy exited"})
 			}
 		})
 	}()
@@ -283,6 +299,13 @@ func (v *View) main(gtx C) D {
 		return th.EmptyState(gtx, "no-devices", "No devices",
 			"Plug in a device with USB debugging on, or add one over Wi-Fi.", nil)
 	}
+	if v.tab == 1 {
+		return kit.Col(gtx,
+			kit.Rigid(func(gtx C) D { return v.header(gtx, d) }),
+			kit.Rigid(kit.HLine(th.Divider)),
+			kit.Flexed(1, v.logsLayout),
+		)
+	}
 	o := v.options()
 	return kit.Col(gtx,
 		kit.Rigid(func(gtx C) D { return v.header(gtx, d) }),
@@ -324,6 +347,8 @@ func (v *View) header(gtx C, d *adb.Device) D {
 			kit.Rigid(kit.Gap(12, 0)),
 			kit.Rigid(func(gtx C) D { return th.Text(gtx, d.Serial, th.Type.Small, th.Dim, kit.Regular) }),
 			kit.Flexed(1, kit.Grow),
+			kit.Rigid(func(gtx C) D { return th.Tabs(gtx, &v.tabs, "page", []string{"Settings", "Logs"}, v.tab) }),
+			kit.Rigid(kit.Gap(kit.Space4, 0)),
 			kit.Rigid(func(gtx C) D {
 				return th.Disable(gtx, d.State != "device", func(gtx C) D {
 					return ui.Button{ID: "start", Text: label, Style: style}.Layout(gtx, th, &v.start)
@@ -352,7 +377,7 @@ func (v *View) settings(gtx C, o *scrcpy.Options) D {
 			shown = append(shown, s)
 		}
 	}
-	return th.List(gtx, &v.page, "settings", 1, func(gtx C, _ int) D {
+	return th.List(gtx, &v.scroll, "settings", 1, func(gtx C, _ int) D {
 		return layout.Inset{Top: 12, Bottom: 12, Left: 24, Right: 24}.Layout(gtx, func(gtx C) D {
 			gap := gtx.Dp(kit.Space3)
 			n := max(1, min(maxColumns, len(shown), (gtx.Constraints.Max.X+gap)/(gtx.Dp(columnMin)+gap)))

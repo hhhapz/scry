@@ -37,3 +37,25 @@ func TestRate(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLog(t *testing.T) {
+	for in, want := range map[string]LogLine{
+		"[server] INFO: Device: [samsung] SM-X910": {Info, "server", "Device: [samsung] SM-X910"},
+		"WARN: Demuxer 'audio': stream disabled":   {Warn, "client", "Demuxer 'audio': stream disabled"},
+		"ERROR: Could not find any ADB device":     {Error, "client", "Could not find any ADB device"},
+		"scrcpy-server: 1 file pushed, 0 skipped.": {Info, "adb", "scrcpy-server: 1 file pushed, 0 skipped."},
+		"    --display-id=0    (2960x1848)":        {Info, "client", "    --display-id=0    (2960x1848)"},
+	} {
+		if got := ParseLog(in); got != want {
+			t.Errorf("ParseLog(%q) = %+v, want %+v", in, got, want)
+		}
+	}
+}
+
+func TestLogParserContinuation(t *testing.T) {
+	var p LogParser
+	p.Parse("[server] INFO: List of displays:")
+	if got := p.Parse("    --display-id=0    (2960x1848)"); got.Source != "server" {
+		t.Fatalf("continuation source = %q, want server", got.Source)
+	}
+}

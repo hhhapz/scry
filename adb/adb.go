@@ -52,3 +52,9 @@ func ParseDevices(out string) []Device {
 	}
 	return ds
 }
+
+// Run runs `adb -s serial args...` and returns its combined output.
+func Run(ctx context.Context, serial string, args ...string) (string, error) {
+	out, err := exec.CommandContext(ctx, "adb", append([]string{"-s", serial}, args...)...).CombinedOutput()
+	return string(out), err
+}
