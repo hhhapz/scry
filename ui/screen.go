@@ -504,7 +504,7 @@ func (v *View) screenLayout(gtx C) D {
 		if o := v.options(); !o.Embeddable() {
 			body = "This session kind runs in scrcpy itself. Choose Mirror, App window or Camera to mirror inside scry."
 		}
-		return th.EmptyState(gtx, "screen-empty", "Not mirroring", body, nil)
+		return ui.EmptyState{ID: "screen-empty", Title: "Not mirroring", Body: body}.Layout(gtx, th)
 	}
 	return kit.Col(gtx,
 		kit.Rigid(func(gtx C) D { return v.screenToolbar(gtx, ls) }),

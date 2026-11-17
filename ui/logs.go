@@ -134,8 +134,7 @@ func (v *View) logsLayout(gtx C) D {
 			b := p.buf(v.selected)
 			if b.Len() == 0 {
 				gtx.Constraints.Min = gtx.Constraints.Max
-				return th.EmptyState(gtx, "logs-empty", "No logs yet",
-					"Start a session or run an adb command below.", nil)
+				return ui.EmptyState{ID: "logs-empty", Title: "No logs yet", Body: "Start a session or run an adb command below."}.Layout(gtx, th)
 			}
 			return layout.Inset{Left: 16, Right: 8}.Layout(gtx, func(gtx C) D {
 				return th.LogView(gtx, &p.view, b, "logs")

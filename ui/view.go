@@ -49,16 +49,16 @@ type View struct {
 	refresh  kit.Clickable
 	add      kit.Clickable
 	start    kit.Clickable
-	kind     kit.Tabs
+	kind     ui.TabsState
 	kindSel  ui.SelectState // replaces the tabs when they do not fit
-	fps      kit.Tabs
+	fps      ui.TabsState
 	bitrate  ui.SliderState
 	appName  widget.Editor
 	toggles  kit.Pool[kit.Clickable]
 	selects  kit.Pool[ui.SelectState]
 	scroll   kit.List // settings
 	tab      int      // tabSettings, tabScreen, tabLogs
-	tabs     kit.Tabs
+	tabs     ui.TabsState
 	screen   screenPage
 	logs     logsPage
 	toasts   ui.Toasts
@@ -74,8 +74,6 @@ func New(app *kit.App) *View {
 		live:     map[string]*liveSession{},
 		demos:    map[string]string{},
 	}
-	v.kind.Style = kit.TabsSegmented
-	v.fps.Style = kit.TabsSegmented
 	v.appName.SingleLine = true
 	v.scroll.Axis = layout.Vertical
 	v.logs.init()
@@ -245,7 +243,7 @@ func (v *View) handle(gtx C) {
 	if v.device() == nil {
 		return
 	}
-	if i, ok := v.tabs.Clicked(gtx); ok {
+	if i, ok := v.tabs.Update(gtx); ok {
 		v.tab = i
 	}
 	if v.start.Clicked(gtx) {
@@ -260,13 +258,13 @@ func (v *View) handle(gtx C) {
 		return
 	}
 	o := v.options()
-	if i, ok := v.kind.Clicked(gtx); ok {
+	if i, ok := v.kind.Update(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
 	}
 	if i, ok := v.kindSel.Update(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
 	}
-	if i, ok := v.fps.Clicked(gtx); ok {
+	if i, ok := v.fps.Update(gtx); ok {
 		o.MaxFPS = fpsVals[i]
 	}
 	if val, ok := v.bitrate.Update(gtx); ok {
@@ -396,7 +394,7 @@ func (v *View) sidebar(gtx C) D {
 							} else if d.State != "device" {
 								trailing, tc = d.State, th.Warn
 							}
-							return th.NavItem(gtx, v.nav.Get(d.Serial), "device:"+d.Serial, v.title(d), trailing, tc, d.Serial == v.selected)
+							return ui.NavItem{ID: "device:" + d.Serial, Label: v.title(d), Trailing: trailing, TrailColor: tc, Active: d.Serial == v.selected}.Layout(gtx, th, v.nav.Get(d.Serial))
 						})
 					}
 					return kit.Col(gtx, children...)
@@ -416,8 +414,7 @@ func (v *View) main(gtx C) D {
 	gtx.Constraints.Min = gtx.Constraints.Max
 	d := v.device()
 	if d == nil {
-		return th.EmptyState(gtx, "no-devices", "No devices",
-			"Plug in a device with USB debugging on, or add one over Wi-Fi.", nil)
+		return ui.EmptyState{ID: "no-devices", Title: "No devices", Body: "Plug in a device with USB debugging on, or add one over Wi-Fi."}.Layout(gtx, th)
 	}
 	if v.tab == tabScreen {
 		return kit.Col(gtx,
@@ -443,7 +440,7 @@ func (v *View) main(gtx C) D {
 						return ui.Select{ID: "kind-select", Options: scrcpy.KindNames, Selected: int(o.Kind)}.Layout(gtx, th, &v.kindSel)
 					})(gtx)
 				}
-				return th.Tabs(gtx, &v.kind, "kind", scrcpy.KindNames, int(o.Kind))
+				return ui.Tabs{ID: "kind", Labels: scrcpy.KindNames, Selected: int(o.Kind), Style: ui.TabsSegmented}.Layout(gtx, th, &v.kind)
 			})
 		}),
 		kit.Rigid(kit.HLine(th.Divider)),
@@ -477,7 +474,7 @@ func (v *View) header(gtx C, d *adb.Device) D {
 					kit.Rigid(func(gtx C) D { return v.deviceLine(gtx, *d) }),
 				)
 			}),
-			kit.Rigid(func(gtx C) D { return th.Tabs(gtx, &v.tabs, "page", tabNames, v.tab) }),
+			kit.Rigid(func(gtx C) D { return ui.Tabs{ID: "page", Labels: tabNames, Selected: v.tab}.Layout(gtx, th, &v.tabs) }),
 			kit.Rigid(kit.Gap(kit.Space4, 0)),
 			kit.Rigid(func(gtx C) D {
 				return th.Disable(gtx, d.State != "device", func(gtx C) D {
@@ -630,7 +627,7 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 					i = j
 				}
 			}
-			return th.Tabs(gtx, &v.fps, "fps", fpsNames, i)
+			return ui.Tabs{ID: "fps", Labels: fpsNames, Selected: i, Style: ui.TabsSegmented}.Layout(gtx, th, &v.fps)
 		}
 	case it.custom == "bitrate":
 		control = func(gtx C) D { return v.bitrateControl(gtx, o) }
