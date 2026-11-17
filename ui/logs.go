@@ -21,7 +21,7 @@ type logsPage struct {
 	bufs    map[string]*kit.LogBuffer // per device serial
 	view    kit.LogView
 	filter  widget.Editor
-	level   kit.Select
+	level   ui.SelectState
 	clear   kit.Clickable
 	console widget.Editor
 	run     kit.Clickable
@@ -59,7 +59,7 @@ func (v *View) log(serial string, l scrcpy.LogLine) {
 
 func (v *View) handleLogs(gtx C) {
 	p := &v.logs
-	if i, ok := p.level.Changed(gtx); ok {
+	if i, ok := p.level.Update(gtx); ok {
 		p.view.MinLevel = levelVals[i]
 	}
 	if p.clear.Clicked(gtx) {
@@ -120,7 +120,7 @@ func (v *View) logsLayout(gtx C) D {
 					}),
 					kit.Rigid(kit.Gap(kit.Space2, 0)),
 					kit.Rigid(kit.Fixed(140, func(gtx C) D {
-						return th.Select(gtx, &p.level, "log-level", levelNames, sel)
+						return ui.Select{ID: "log-level", Options: levelNames, Selected: sel}.Layout(gtx, th, &p.level)
 					})),
 					kit.Rigid(kit.Gap(kit.Space2, 0)),
 					kit.Rigid(func(gtx C) D {

@@ -43,12 +43,12 @@ type View struct {
 	add      kit.Clickable
 	start    kit.Clickable
 	kind     kit.Tabs
-	kindSel  kit.Select // replaces the tabs when they do not fit
+	kindSel  ui.SelectState // replaces the tabs when they do not fit
 	fps      kit.Tabs
 	bitrate  ui.SliderState
 	appName  widget.Editor
 	toggles  kit.Pool[kit.Clickable]
-	selects  kit.Pool[kit.Select]
+	selects  kit.Pool[ui.SelectState]
 	scroll   kit.List // settings
 	tab      int      // 0 settings, 1 logs
 	tabs     kit.Tabs
@@ -185,7 +185,7 @@ func (v *View) handle(gtx C) {
 	if i, ok := v.kind.Clicked(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
 	}
-	if i, ok := v.kindSel.Changed(gtx); ok {
+	if i, ok := v.kindSel.Update(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
 	}
 	if i, ok := v.fps.Clicked(gtx); ok {
@@ -207,7 +207,7 @@ func (v *View) handle(gtx C) {
 				*b = !*b
 			}
 			if it.choices != nil {
-				if i, ok := v.selects.Get(it.id).Changed(gtx); ok {
+				if i, ok := v.selects.Get(it.id).Update(gtx); ok {
 					it.set(o, i)
 				}
 			}
@@ -339,7 +339,7 @@ func (v *View) main(gtx C) D {
 			return layout.Inset{Left: 24, Right: 24, Bottom: 12}.Layout(gtx, func(gtx C) D {
 				if gtx.Constraints.Max.X < gtx.Dp(tabsMinW) {
 					return kit.Fixed(240, func(gtx C) D {
-						return th.Select(gtx, &v.kindSel, "kind-select", scrcpy.KindNames, int(o.Kind))
+						return ui.Select{ID: "kind-select", Options: scrcpy.KindNames, Selected: int(o.Kind)}.Layout(gtx, th, &v.kindSel)
 					})(gtx)
 				}
 				return th.Tabs(gtx, &v.kind, "kind", scrcpy.KindNames, int(o.Kind))
@@ -515,7 +515,7 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 	switch {
 	case it.choices != nil:
 		control = func(gtx C) D {
-			return th.Select(gtx, v.selects.Get(it.id), it.id, it.choices, it.get(o))
+			return ui.Select{ID: it.id, Options: it.choices, Selected: it.get(o)}.Layout(gtx, th, v.selects.Get(it.id))
 		}
 	case it.custom == "fps":
 		control = func(gtx C) D {
