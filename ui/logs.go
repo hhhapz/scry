@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -51,6 +53,9 @@ func (p *logsPage) buf(serial string) *kit.LogBuffer {
 
 // log appends one line for a device. Call it on the UI goroutine.
 func (v *View) log(serial string, l scrcpy.LogLine) {
+	if v.Verbose {
+		fmt.Fprintf(os.Stderr, "%s %s: %s\n", serial, l.Source, l.Text)
+	}
 	v.logs.buf(serial).Append(kit.LogLine{Time: time.Now(), Level: toKit[l.Level], Source: l.Source, Text: l.Text})
 	if l.Level >= scrcpy.Warn || l.Source != "adb" {
 		v.status = l.Text

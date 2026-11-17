@@ -30,6 +30,8 @@ type (
 type View struct {
 	Theme *kit.Theme
 	app   *kit.App // nil in tests
+	// Verbose copies every log line to stderr.
+	Verbose bool
 
 	devices  []adb.Device
 	selected string                     // serial
@@ -122,6 +124,16 @@ func (v *View) SetDevices(ds []adb.Device) {
 			}
 		})
 	}
+}
+
+// StartSelected starts a session on the selected device once it is listed
+// (the -start flag).
+func (v *View) StartSelected() {
+	v.post(func() {
+		if v.device() != nil && !v.running(v.selected) {
+			v.toggleSession()
+		}
+	})
 }
 
 // AddDemo lists a pretend device that streams file (the built-in test

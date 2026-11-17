@@ -18,14 +18,20 @@ import (
 func main() {
 	demo := flag.Bool("demo", false, "add a demo device that streams a test pattern")
 	demoFile := flag.String("demo-file", "", "add a demo device that streams this video file")
+	start := flag.Bool("start", false, "start mirroring the first device at once")
+	verbose := flag.Bool("v", false, "copy log lines to stderr")
 	flag.Parse()
 	app := kit.NewApp("scry", "scry", 1100, 760)
 	v := ui.New(app)
+	v.Verbose = *verbose
 	if *demo {
 		v.AddDemo("")
 	}
 	if *demoFile != "" {
 		v.AddDemo(*demoFile)
+	}
+	if *start {
+		v.StartSelected()
 	}
 	app.Run(v.Frame)
 }

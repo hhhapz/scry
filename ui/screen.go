@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -150,7 +151,11 @@ func (v *View) startLive(serial string) {
 				logf(scrcpy.Error, "unsupported video codec %q", name)
 				return
 			}
-			dec, err := media.NewDecoder(c, media.Options{DMABuf: runtime.GOOS == "linux"})
+			opt := media.Options{DMABuf: runtime.GOOS == "linux"}
+			if os.Getenv("SCRY_HWDEC") == "off" { // escape hatch for misbehaving drivers
+				opt = media.Options{Hardware: media.HardwareOff}
+			}
+			dec, err := media.NewDecoder(c, opt)
 			if err != nil {
 				logf(scrcpy.Error, "video decoder: %v", err)
 				return
