@@ -1,0 +1,50 @@
+/usr/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 676.5 MB/s (733930 bytes in 0.001s)
+[server] INFO: Device: [samsung] samsung SM-X910 (Android 16)
+[server] INFO: Processing Android apps... (this may take some time)
+[server] INFO: List of apps:
+ * Accessibility                  com.samsung.accessibility
+ * Avatar Editor                  com.samsung.android.aremojieditor
+ * Call                           com.samsung.android.incallui
+ * Contacts                       com.samsung.android.app.contacts
+ * Device care                    com.samsung.android.lool
+ * Galaxy Resource Updater        com.samsung.android.gru
+ * Galaxy Store                   com.sec.android.app.samsungapps
+ * Gallery                        com.sec.android.gallery3d
+ * Google                         com.google.android.googlequicksearchbox
+ * Google Play Store              com.android.vending
+ * Interpreter                    com.samsung.android.app.interpreter
+ * Link to Windows                com.microsoft.appmanager
+ * Live Transcribe & Sound Notifications
+                                  com.google.audio.hearing.visualization.accessibility.scribe
+ * Meet                           com.google.android.apps.tachyon
+ * My Files                       com.sec.android.app.myfiles
+ * Phone                          com.samsung.android.dialer
+ * Samsung Pass                   com.samsung.android.samsungpass
+ * Service provider location      com.sec.location.nfwlocationprivacy
+ * Settings                       com.android.settings
+ * System Tracing                 com.android.traceur
+ * Wearable Manager Installer     com.samsung.android.app.watchmanagerstub
+ * YouTube                        com.google.android.youtube
+ - Calendar                       com.google.android.calendar
+ - Claude                         com.anthropic.claude
+ - Clock                          com.sec.android.app.clockpackage
+ - Discord                        com.discord
+ - Findroid                       dev.jdtech.jellyfin
+ - Firefox                        org.mozilla.firefox
+ - Frosty                         com.tommychow.frosty
+ - Gboard                         com.google.android.inputmethod.latin
+ - Immich                         app.alextran.immich
+ - Jellyfin                       org.jellyfin.mobile
+ - Keyguard                       com.artemchep.keyguard
+ - Notewise                       com.yygg.note.app
+ - Photos                         com.google.android.apps.photos
+ - Proton Mail                    ch.protonmail.android
+ - Reddit                         com.reddit.frontpage
+ - Samsung Members                com.samsung.android.voc
+ - Samsung Notes                  com.samsung.android.app.notes
+ - Tailscale                      com.tailscale.ipn
+ - Termux                         com.termux
+ - WhatsApp                       com.whatsapp
+scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>
+INFO: ADB device found:
+INFO:     --> (tcpip)  192.168.0.241:43629             device  SM_X910

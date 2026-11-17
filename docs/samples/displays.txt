@@ -1,0 +1,7 @@
+/usr/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 217.4 MB/s (733930 bytes in 0.003s)
+[server] INFO: Device: [samsung] samsung SM-X910 (Android 16)
+[server] INFO: List of displays:
+    --display-id=0    (2960x1848)
+scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>
+INFO: ADB device found:
+INFO:     --> (tcpip)  192.168.0.241:43629             device  SM_X910

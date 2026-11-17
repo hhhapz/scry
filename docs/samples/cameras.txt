@@ -1,0 +1,10 @@
+/usr/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 690.1 MB/s (733930 bytes in 0.001s)
+[server] INFO: Device: [samsung] samsung SM-X910 (Android 16)
+[server] INFO: List of cameras:
+    --camera-id=0    (back, 4128x3096, fps={10, 15, 30}, zoom-range=[1, 10])
+    --camera-id=1    (front, 4000x3000, fps={10, 15, 30}, zoom-range=[1, 8])
+    --camera-id=2    (back, 3264x2448, fps={10, 15, 30}, zoom-range=[1, 8])
+    --camera-id=3    (front, 4000x3000, fps={10, 15, 30}, zoom-range=[1, 8])
+scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>
+INFO: ADB device found:
+INFO:     --> (tcpip)  192.168.0.241:43629             device  SM_X910
