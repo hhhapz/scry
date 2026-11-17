@@ -14,6 +14,8 @@ func TestArgs(t *testing.T) {
 		{"defaults", Options{}, []string{"--serial=x"}},
 		{"video", Options{MaxSize: 1920, BitRate: 16_000_000, MaxFPS: 60},
 			[]string{"--serial=x", "--max-size=1920", "--video-bit-rate=16M", "--max-fps=60"}},
+		{"typing modes", Options{KeyInject: "text"}, []string{"--serial=x", "--prefer-text"}},
+		{"typing needs the sdk keyboard", Options{KeyInject: "raw", Keyboard: "uhid"}, []string{"--serial=x", "--keyboard=uhid"}},
 		{"read-only drops device options", Options{ReadOnly: true, StayAwake: true, Keyboard: "uhid"},
 			[]string{"--serial=x", "--no-control"}},
 		{"app window", Options{Kind: AppWindow, NewDisplay: "1920x1080", StartApp: "org.mozilla.firefox"},

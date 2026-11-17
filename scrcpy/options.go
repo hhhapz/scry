@@ -46,6 +46,7 @@ type Options struct {
 	// Input
 	ReadOnly        bool
 	Keyboard, Mouse string // "" is sdk; "uhid", "aoa", "disabled"
+	KeyInject       string // sdk keyboard: "" (letters as keys), "text" or "raw"
 	NoClipboardSync bool
 
 	// Device
@@ -128,6 +129,10 @@ func (o Options) Args(serial string) []string {
 		} else {
 			str(o.Keyboard, "--keyboard")
 			str(o.Mouse, "--mouse")
+			if o.Keyboard == "" {
+				flag(o.KeyInject == "text", "--prefer-text")
+				flag(o.KeyInject == "raw", "--raw-key-events")
+			}
 			flag(o.NoClipboardSync, "--no-clipboard-autosync")
 			flag(o.TurnScreenOff, "--turn-screen-off")
 			flag(o.StayAwake, "--stay-awake")

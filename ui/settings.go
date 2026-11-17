@@ -111,6 +111,9 @@ var sections = []section{
 			toggle: func(o *scrcpy.Options) *bool { return &o.ReadOnly }},
 		strChoice("keyboard", "Keyboard", func(o *scrcpy.Options) *string { return &o.Keyboard }, inputModes, inputValues),
 		strChoice("mouse", "Mouse", func(o *scrcpy.Options) *string { return &o.Mouse }, inputModes, inputValues),
+		standardKeyboard(strChoice("typing", "Typing", func(o *scrcpy.Options) *string { return &o.KeyInject },
+			[]string{"Letters as keys (games)", "Everything as text (accents)", "Everything as keys"},
+			[]string{"", "text", "raw"})),
 		{id: "clipboard", label: "Sync clipboard", kinds: control, invert: true,
 			toggle: func(o *scrcpy.Options) *bool { return &o.NoClipboardSync }},
 	}},
@@ -128,6 +131,13 @@ var sections = []section{
 	}},
 }
 
+// standardKeyboard marks an item that applies to the standard (sdk) keyboard only.
+func standardKeyboard(it item) item {
+	it.disabled = func(o *scrcpy.Options) bool { return o.Keyboard != "" }
+	it.kinds = control
+	return it
+}
+
 // scrcpyWindow marks an item that only affects scrcpy's own window.
 func scrcpyWindow(it item) item {
 	it.disabled = func(o *scrcpy.Options) bool { return !o.SeparateWindow }
@@ -135,4 +145,6 @@ func scrcpyWindow(it item) item {
 }
 
 // readOnlyLocks lists the Input items that read-only disables.
-func readOnlyLocks(id string) bool { return id == "keyboard" || id == "mouse" || id == "clipboard" }
+func readOnlyLocks(id string) bool {
+	return id == "keyboard" || id == "mouse" || id == "clipboard" || id == "typing"
+}

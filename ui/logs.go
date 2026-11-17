@@ -12,6 +12,7 @@ import (
 
 	"github.com/hhhapz/giokit/kit"
 	"github.com/hhhapz/giokit/kit/ui"
+	"github.com/hhhapz/giokit/kit/x"
 
 	"github.com/hhhapz/scry/adb"
 	"github.com/hhhapz/scry/scrcpy"
@@ -20,8 +21,8 @@ import (
 // logsPage is the Logs tab: everything scrcpy and adb printed for a device,
 // filterable, plus a box to run adb commands against it.
 type logsPage struct {
-	bufs    map[string]*kit.LogBuffer // per device serial
-	view    kit.LogView
+	bufs    map[string]*x.LogBuffer // per device serial
+	view    x.LogViewState
 	filter  widget.Editor
 	level   ui.SelectState
 	clear   kit.Clickable
@@ -31,21 +32,21 @@ type logsPage struct {
 
 var (
 	levelNames = []string{"All", "Info", "Warnings", "Errors"}
-	levelVals  = []kit.LogLevel{kit.LogDebug, kit.LogInfo, kit.LogWarn, kit.LogError}
-	toKit      = map[scrcpy.Level]kit.LogLevel{scrcpy.Debug: kit.LogDebug, scrcpy.Info: kit.LogInfo, scrcpy.Warn: kit.LogWarn, scrcpy.Error: kit.LogError}
+	levelVals  = []x.LogLevel{x.LogDebug, x.LogInfo, x.LogWarn, x.LogError}
+	toKit      = map[scrcpy.Level]x.LogLevel{scrcpy.Debug: x.LogDebug, scrcpy.Info: x.LogInfo, scrcpy.Warn: x.LogWarn, scrcpy.Error: x.LogError}
 )
 
 func (p *logsPage) init() {
-	p.bufs = map[string]*kit.LogBuffer{}
+	p.bufs = map[string]*x.LogBuffer{}
 	p.filter.SingleLine = true
 	p.console.SingleLine = true
 	p.console.Submit = true
 }
 
-func (p *logsPage) buf(serial string) *kit.LogBuffer {
+func (p *logsPage) buf(serial string) *x.LogBuffer {
 	b := p.bufs[serial]
 	if b == nil {
-		b = &kit.LogBuffer{}
+		b = &x.LogBuffer{}
 		p.bufs[serial] = b
 	}
 	return b
@@ -56,7 +57,7 @@ func (v *View) log(serial string, l scrcpy.LogLine) {
 	if v.Verbose {
 		fmt.Fprintf(os.Stderr, "%s %s: %s\n", serial, l.Source, l.Text)
 	}
-	v.logs.buf(serial).Append(kit.LogLine{Time: time.Now(), Level: toKit[l.Level], Source: l.Source, Text: l.Text})
+	v.logs.buf(serial).Append(x.LogLine{Time: time.Now(), Level: toKit[l.Level], Source: l.Source, Text: l.Text})
 	if l.Level >= scrcpy.Warn || l.Source != "adb" {
 		v.status = l.Text
 	}
@@ -142,7 +143,7 @@ func (v *View) logsLayout(gtx C) D {
 				return ui.EmptyState{ID: "logs-empty", Title: "No logs yet", Body: "Start a session or run an adb command below."}.Layout(gtx, th)
 			}
 			return layout.Inset{Left: 16, Right: 8}.Layout(gtx, func(gtx C) D {
-				return th.LogView(gtx, &p.view, b, "logs")
+				return x.LogView{ID: "logs", Buffer: b}.Layout(gtx, th, &p.view)
 			})
 		}),
 		kit.Rigid(kit.HLine(th.Divider)),

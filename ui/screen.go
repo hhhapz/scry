@@ -125,6 +125,12 @@ func (ls *liveSession) send(ms ...proto.Control) {
 }
 
 func keyMode(o scrcpy.Options) input.KeyMode {
+	switch o.KeyInject {
+	case "text":
+		return input.Text
+	case "raw":
+		return input.Raw
+	}
 	return input.Mixed
 }
 
