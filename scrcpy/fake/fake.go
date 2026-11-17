@@ -41,6 +41,37 @@ type Device struct {
 	controls  []proto.Control
 	clipboard string
 	notify    chan struct{}
+	paused    bool
+	resume    *sync.Cond
+}
+
+// Pause holds the stream after the packet in flight, as a still screen
+// would: tests use it to look at a stable frame.
+func (d *Device) Pause() {
+	d.mu.Lock()
+	d.paused = true
+	d.mu.Unlock()
+}
+
+// Resume continues a paused stream.
+func (d *Device) Resume() {
+	d.mu.Lock()
+	d.paused = false
+	if d.resume != nil {
+		d.resume.Broadcast()
+	}
+	d.mu.Unlock()
+}
+
+func (d *Device) waitPaused() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.resume == nil {
+		d.resume = sync.NewCond(&d.mu)
+	}
+	for d.paused {
+		d.resume.Wait()
+	}
 }
 
 // Controls returns the control messages received so far.
@@ -147,6 +178,7 @@ func (d *Device) Serve(video io.WriteCloser, control io.ReadWriteCloser) error {
 				f.Close()
 				return err
 			}
+			d.waitPaused()
 			pts := offset + p.PTS
 			last = p.PTS
 			if d.Realtime {

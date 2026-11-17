@@ -30,8 +30,12 @@ type Handler struct {
 	Packet func(p proto.Packet)
 	// Device is called for device messages (clipboard changes, acks).
 	Device func(m proto.DeviceMessage)
-	// Closed is called once when the session ends, with nil for Close.
+	// Closed is called once when the session ends, with nil for Close. It
+	// may run on the goroutine calling Close.
 	Closed func(err error)
+	// Stopped is called on the video reader's goroutine after its last
+	// Packet call: the place to free a decoder that Packet uses.
+	Stopped func()
 }
 
 // Conn is a running session.
@@ -78,6 +82,9 @@ func Open(video io.ReadCloser, control io.ReadWriteCloser, h Handler) (*Conn, er
 }
 
 func (c *Conn) readVideo() {
+	if c.h.Stopped != nil {
+		defer c.h.Stopped()
+	}
 	r := proto.NewReader(c.video)
 	for {
 		s, p, err := r.Next()

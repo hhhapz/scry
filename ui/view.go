@@ -6,7 +6,9 @@ package ui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"gioui.org/layout"
@@ -33,8 +35,13 @@ type View struct {
 	selected string                     // serial
 	opts     map[string]*scrcpy.Options // per device
 	sessions map[string]*scrcpy.Session
-	info     map[string]adb.Info // what each authorized device said about itself
+	info     map[string]adb.Info     // what each authorized device said about itself
+	live     map[string]*liveSession // embedded sessions, by serial
+	demos    map[string]string       // demo devices: serial → video file ("" for the built-in clip)
 	status   string
+
+	postMu sync.Mutex
+	posts  []func() // without an app (tests): run at the start of the next frame
 
 	// widget state
 	nav      kit.Pool[kit.Clickable]
@@ -50,10 +57,11 @@ type View struct {
 	toggles  kit.Pool[kit.Clickable]
 	selects  kit.Pool[ui.SelectState]
 	scroll   kit.List // settings
-	tab      int      // 0 settings, 1 logs
+	tab      int      // tabSettings, tabScreen, tabLogs
 	tabs     kit.Tabs
+	screen   screenPage
 	logs     logsPage
-	toasts   kit.Toasts
+	toasts   ui.Toasts
 }
 
 // New makes the view. With a non-nil app it lists adb devices at once.
@@ -63,12 +71,15 @@ func New(app *kit.App) *View {
 		opts:     map[string]*scrcpy.Options{},
 		sessions: map[string]*scrcpy.Session{},
 		info:     map[string]adb.Info{},
+		live:     map[string]*liveSession{},
+		demos:    map[string]string{},
 	}
 	v.kind.Style = kit.TabsSegmented
 	v.fps.Style = kit.TabsSegmented
 	v.appName.SingleLine = true
 	v.scroll.Axis = layout.Vertical
 	v.logs.init()
+	v.screen.init()
 	if app != nil {
 		v.Refresh()
 	}
@@ -87,8 +98,12 @@ func (v *View) Refresh() {
 	})
 }
 
-// SetDevices replaces the device list, keeping the selection if it is still there.
+// SetDevices replaces the device list, keeping the selection if it is still
+// there. Demo devices stay listed.
 func (v *View) SetDevices(ds []adb.Device) {
+	for serial := range v.demos {
+		ds = append(ds, adb.Device{Serial: serial, State: "device", Model: "Demo"})
+	}
 	v.devices = ds
 	v.status = fmt.Sprintf("%d device(s)", len(ds))
 	if v.device() == nil && len(ds) > 0 {
@@ -109,6 +124,35 @@ func (v *View) SetDevices(ds []adb.Device) {
 			}
 		})
 	}
+}
+
+// AddDemo lists a pretend device that streams file (the built-in test
+// pattern when ""), to try embedded mirroring without a phone.
+func (v *View) AddDemo(file string) {
+	serial := fmt.Sprintf("demo-%d", len(v.demos)+1)
+	v.demos[serial] = file
+	name := "Demo device"
+	if file != "" {
+		name = filepath.Base(file)
+	}
+	v.info[serial] = adb.Info{Name: name, Retail: "Pretend device"}
+	v.SetDevices(v.realDevices())
+}
+
+func (v *View) isDemo(serial string) bool {
+	_, ok := v.demos[serial]
+	return ok
+}
+
+// realDevices is the list without demo devices.
+func (v *View) realDevices() []adb.Device {
+	var ds []adb.Device
+	for _, d := range v.devices {
+		if !v.isDemo(d.Serial) {
+			ds = append(ds, d)
+		}
+	}
+	return ds
 }
 
 // title and subtitle name a device as nicely as what we know allows.
@@ -140,16 +184,46 @@ func (v *View) options() *scrcpy.Options {
 }
 
 // post runs f on the UI goroutine.
+// Safe from any goroutine.
 func (v *View) post(f func()) {
 	if v.app == nil {
-		f()
+		v.postMu.Lock()
+		v.posts = append(v.posts, f)
+		v.postMu.Unlock()
 		return
 	}
 	v.app.Post(f)
 }
 
+// drain runs queued posts (tests; kit.App drains its own).
+func (v *View) drain() {
+	v.postMu.Lock()
+	ps := v.posts
+	v.posts = nil
+	v.postMu.Unlock()
+	for _, f := range ps {
+		f()
+	}
+}
+
+// invalidate requests a frame from any goroutine.
+func (v *View) invalidate() {
+	if v.app != nil {
+		v.app.Invalidate()
+	}
+}
+
+const (
+	tabSettings = iota
+	tabScreen
+	tabLogs
+)
+
+var tabNames = []string{"Settings", "Screen", "Logs"}
+
 // Frame is one frame: handle input, then draw.
 func (v *View) Frame(gtx C) {
+	v.drain()
 	v.handle(gtx)
 	v.layout(gtx)
 }
@@ -177,8 +251,12 @@ func (v *View) handle(gtx C) {
 	if v.start.Clicked(gtx) {
 		v.toggleSession()
 	}
-	if v.tab == 1 {
+	switch v.tab {
+	case tabLogs:
 		v.handleLogs(gtx)
+		return
+	case tabScreen:
+		v.handleScreen(gtx)
 		return
 	}
 	o := v.options()
@@ -215,10 +293,23 @@ func (v *View) handle(gtx C) {
 	}
 }
 
+// running reports whether a session (embedded or external) is live.
+func (v *View) running(serial string) bool {
+	return v.sessions[serial] != nil || v.live[serial] != nil
+}
+
 func (v *View) toggleSession() {
 	serial := v.selected
 	if s := v.sessions[serial]; s != nil {
 		s.Stop()
+		return
+	}
+	if ls := v.live[serial]; ls != nil {
+		v.stopLive(ls)
+		return
+	}
+	if o := v.options(); o.Embeddable() && !o.SeparateWindow || v.isDemo(serial) {
+		v.startLive(serial)
 		return
 	}
 	args := v.options().Args(serial)
@@ -247,7 +338,7 @@ func (v *View) toggleSession() {
 
 func (v *View) layout(gtx C) D {
 	th := v.Theme
-	return th.ToastHost(gtx, &v.toasts, func(gtx C) D {
+	return ui.ToastHost{Page: func(gtx C) D {
 		return kit.Fill(gtx, th.Bg, func(gtx C) D {
 			gtx.Constraints.Min = gtx.Constraints.Max
 			return kit.Col(gtx,
@@ -270,7 +361,7 @@ func (v *View) layout(gtx C) D {
 				}),
 			)
 		})
-	})
+	}}.Layout(gtx, th, &v.toasts)
 }
 
 func (v *View) sidebar(gtx C) D {
@@ -297,7 +388,10 @@ func (v *View) sidebar(gtx C) D {
 							if d.Wireless() {
 								trailing = "Wi-Fi"
 							}
-							if v.sessions[d.Serial] != nil {
+							if v.isDemo(d.Serial) {
+								trailing = "Demo"
+							}
+							if v.running(d.Serial) {
 								trailing, tc = "Live", th.Good
 							} else if d.State != "device" {
 								trailing, tc = d.State, th.Warn
@@ -325,7 +419,14 @@ func (v *View) main(gtx C) D {
 		return th.EmptyState(gtx, "no-devices", "No devices",
 			"Plug in a device with USB debugging on, or add one over Wi-Fi.", nil)
 	}
-	if v.tab == 1 {
+	if v.tab == tabScreen {
+		return kit.Col(gtx,
+			kit.Rigid(func(gtx C) D { return v.header(gtx, d) }),
+			kit.Rigid(kit.HLine(th.Divider)),
+			kit.Flexed(1, v.screenLayout),
+		)
+	}
+	if v.tab == tabLogs {
 		return kit.Col(gtx,
 			kit.Rigid(func(gtx C) D { return v.header(gtx, d) }),
 			kit.Rigid(kit.HLine(th.Divider)),
@@ -364,7 +465,7 @@ func (v *View) main(gtx C) D {
 func (v *View) header(gtx C, d *adb.Device) D {
 	th := v.Theme
 	label, style := "Start", ui.Solid
-	if v.sessions[d.Serial] != nil {
+	if v.running(d.Serial) {
 		label, style = "Stop", ui.Danger
 	}
 	return layout.Inset{Top: 20, Bottom: 14, Left: 24, Right: 24}.Layout(gtx, func(gtx C) D {
@@ -376,7 +477,7 @@ func (v *View) header(gtx C, d *adb.Device) D {
 					kit.Rigid(func(gtx C) D { return v.deviceLine(gtx, *d) }),
 				)
 			}),
-			kit.Rigid(func(gtx C) D { return th.Tabs(gtx, &v.tabs, "page", []string{"Settings", "Logs"}, v.tab) }),
+			kit.Rigid(func(gtx C) D { return th.Tabs(gtx, &v.tabs, "page", tabNames, v.tab) }),
 			kit.Rigid(kit.Gap(kit.Space4, 0)),
 			kit.Rigid(func(gtx C) D {
 				return th.Disable(gtx, d.State != "device", func(gtx C) D {
@@ -398,11 +499,14 @@ func (v *View) deviceLine(gtx C, d adb.Device) D {
 	default:
 		return th.Text(gtx, "Device is "+d.State, th.Type.Small, th.Warn, kit.Regular)
 	}
-	conn := "USB"
-	if d.Wireless() {
-		conn = "Wi-Fi"
+	conn := "USB " + d.Serial
+	switch {
+	case v.isDemo(d.Serial):
+		conn = "streams a test video over the scrcpy protocol"
+	case d.Wireless():
+		conn = "Wi-Fi " + d.Serial
 	}
-	parts := []string{conn + " " + d.Serial}
+	parts := []string{conn}
 	if sub := v.subtitle(d); sub != "" {
 		parts = append([]string{sub}, parts...)
 	}
@@ -496,7 +600,8 @@ func (v *View) card(gtx C, o *scrcpy.Options, s section) D {
 			if !it.shown(o.Kind) {
 				continue
 			}
-			locked := reason != "" || (o.ReadOnly && o.Kind != scrcpy.OTG && readOnlyLocks(it.id))
+			locked := reason != "" || (o.ReadOnly && o.Kind != scrcpy.OTG && readOnlyLocks(it.id)) ||
+				(it.disabled != nil && it.disabled(o))
 			children = append(children, kit.Rigid(func(gtx C) D {
 				return th.Disable(gtx, locked, func(gtx C) D { return v.item(gtx, o, it) })
 			}))

@@ -53,9 +53,19 @@ type Options struct {
 
 	// Window
 	Fullscreen, AlwaysOnTop, Borderless bool
+	// SeparateWindow launches scrcpy in its own window instead of mirroring
+	// inside scry. scry-only: no scrcpy flag.
+	SeparateWindow bool
 
 	// Record
 	Record string // file path; "" is off
+}
+
+// Embeddable reports whether scry can mirror this kind of session in its
+// own window (video it can draw). Audio-only and OTG sessions always run
+// scrcpy itself.
+func (o Options) Embeddable() bool {
+	return o.Kind == Mirror || o.Kind == AppWindow || o.Kind == Camera
 }
 
 // Args returns the scrcpy arguments for o on the device with this serial.

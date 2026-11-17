@@ -222,6 +222,18 @@ func pos(x, y float32, frame image.Point) proto.Position {
 // Layouts is the set of saved layouts.
 type Layouts struct {
 	Layouts []Layout `json:"layouts"`
+	// Assigned maps a device serial to the layout it plays with.
+	Assigned map[string]string `json:"assigned,omitempty"`
+}
+
+// Find returns the layout called name, or nil.
+func (ls *Layouts) Find(name string) *Layout {
+	for i := range ls.Layouts {
+		if ls.Layouts[i].Name == name {
+			return &ls.Layouts[i]
+		}
+	}
+	return nil
 }
 
 // LayoutsPath is where layouts are kept: the user config dir/scry/keymaps.json.

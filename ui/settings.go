@@ -32,6 +32,9 @@ type item struct {
 	set     func(o *scrcpy.Options, i int)
 
 	custom string // "bitrate", "fps", "app"
+
+	// disabled, if set, locks the item when it returns true.
+	disabled func(o *scrcpy.Options) bool
 }
 
 func (it item) shown(k scrcpy.Kind) bool { return it.kinds == nil || slices.Contains(it.kinds, k) }
@@ -118,10 +121,17 @@ var sections = []section{
 		toggle("power-off", "Turn screen off when closing", func(o *scrcpy.Options) *bool { return &o.PowerOffOnClose }),
 	}},
 	{title: "Window", kinds: visual, items: []item{
-		toggle("fullscreen", "Start fullscreen", func(o *scrcpy.Options) *bool { return &o.Fullscreen }),
-		toggle("on-top", "Always on top", func(o *scrcpy.Options) *bool { return &o.AlwaysOnTop }),
-		toggle("borderless", "Borderless", func(o *scrcpy.Options) *bool { return &o.Borderless }),
+		toggle("separate", "Open in a separate scrcpy window", func(o *scrcpy.Options) *bool { return &o.SeparateWindow }),
+		scrcpyWindow(toggle("fullscreen", "Start fullscreen", func(o *scrcpy.Options) *bool { return &o.Fullscreen })),
+		scrcpyWindow(toggle("on-top", "Always on top", func(o *scrcpy.Options) *bool { return &o.AlwaysOnTop })),
+		scrcpyWindow(toggle("borderless", "Borderless", func(o *scrcpy.Options) *bool { return &o.Borderless })),
 	}},
+}
+
+// scrcpyWindow marks an item that only affects scrcpy's own window.
+func scrcpyWindow(it item) item {
+	it.disabled = func(o *scrcpy.Options) bool { return !o.SeparateWindow }
+	return it
 }
 
 // readOnlyLocks lists the Input items that read-only disables.
