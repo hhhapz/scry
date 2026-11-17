@@ -40,6 +40,7 @@ type View struct {
 	add      kit.Clickable
 	start    kit.Clickable
 	kind     kit.Tabs
+	kindSel  kit.Select // replaces the tabs when they do not fit
 	fps      kit.Tabs
 	bitrate  kit.Slider
 	appName  widget.Editor
@@ -147,6 +148,9 @@ func (v *View) handle(gtx C) {
 	if i, ok := v.kind.Clicked(gtx); ok {
 		o.Kind = scrcpy.Kind(i)
 	}
+	if i, ok := v.kindSel.Changed(gtx); ok {
+		o.Kind = scrcpy.Kind(i)
+	}
 	if i, ok := v.fps.Clicked(gtx); ok {
 		o.MaxFPS = fpsVals[i]
 	}
@@ -207,7 +211,11 @@ func (v *View) layout(gtx C) D {
 			return kit.Col(gtx,
 				kit.Flexed(1, func(gtx C) D {
 					return kit.Row(gtx,
-						kit.Rigid(kit.Fixed(240, v.sidebar)),
+						kit.Rigid(func(gtx C) D {
+							// a fifth of the window, within reason
+							w := max(180, min(260, gtx.Metric.PxToDp(gtx.Constraints.Max.X)/5))
+							return kit.Fixed(w, v.sidebar)(gtx)
+						}),
 						kit.Rigid(kit.VLine(th.Border)),
 						kit.Flexed(1, v.main),
 					)
@@ -280,6 +288,11 @@ func (v *View) main(gtx C) D {
 		kit.Rigid(func(gtx C) D { return v.header(gtx, d) }),
 		kit.Rigid(func(gtx C) D {
 			return layout.Inset{Left: 24, Right: 24, Bottom: 12}.Layout(gtx, func(gtx C) D {
+				if gtx.Constraints.Max.X < gtx.Dp(tabsMinW) {
+					return kit.Fixed(240, func(gtx C) D {
+						return th.Select(gtx, &v.kindSel, "kind-select", scrcpy.KindNames, int(o.Kind))
+					})(gtx)
+				}
 				return th.Tabs(gtx, &v.kind, "kind", scrcpy.KindNames, int(o.Kind))
 			})
 		}),
@@ -320,7 +333,17 @@ func (v *View) header(gtx C, d *adb.Device) D {
 	})
 }
 
-// settings lays out every section the session kind shows, as cards.
+// Responsive breakpoints for the settings grid and its rows.
+const (
+	columnMin   = 420 // dp: a column narrower than this is not worth splitting for
+	maxColumns  = 3
+	stackBelow  = 400 // dp: a card narrower than this stacks labels above controls
+	controlMaxW = 280 // dp
+	tabsMinW    = 470 // dp: below this the session kind tabs become a dropdown
+)
+
+// settings lays out the sections the session kind shows as cards, packed
+// into as many columns as fit.
 func (v *View) settings(gtx C, o *scrcpy.Options) D {
 	th := v.Theme
 	var shown []section
@@ -329,35 +352,80 @@ func (v *View) settings(gtx C, o *scrcpy.Options) D {
 			shown = append(shown, s)
 		}
 	}
-	return th.List(gtx, &v.page, "settings", len(shown), func(gtx C, i int) D {
-		s := shown[i]
-		return layout.Inset{Top: 12, Left: 24, Right: 24, Bottom: 4}.Layout(gtx, func(gtx C) D {
-			gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(720))
-			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			reason := ""
-			if s.disabled != nil {
-				reason = s.disabled(o)
-			}
-			return th.Card(gtx, func(gtx C) D {
-				children := []layout.FlexChild{kit.Rigid(func(gtx C) D {
-					return kit.Row(gtx,
-						kit.Rigid(func(gtx C) D { return th.Caption(gtx, s.title) }),
-						kit.Flexed(1, kit.Grow),
-						kit.Rigid(func(gtx C) D { return th.Text(gtx, reason, th.Type.Small, th.Dim, kit.Regular) }),
-					)
-				})}
-				for _, it := range s.items {
-					if !it.shown(o.Kind) {
-						continue
-					}
-					locked := reason != "" || (o.ReadOnly && o.Kind != scrcpy.OTG && readOnlyLocks(it.id))
-					children = append(children, kit.Rigid(func(gtx C) D {
-						return th.Disable(gtx, locked, func(gtx C) D { return v.item(gtx, o, it) })
-					}))
+	return th.List(gtx, &v.page, "settings", 1, func(gtx C, _ int) D {
+		return layout.Inset{Top: 12, Bottom: 12, Left: 24, Right: 24}.Layout(gtx, func(gtx C) D {
+			gap := gtx.Dp(kit.Space3)
+			n := max(1, min(maxColumns, len(shown), (gtx.Constraints.Max.X+gap)/(gtx.Dp(columnMin)+gap)))
+			cols := pack(shown, o.Kind, n)
+			colW := (gtx.Constraints.Max.X - gap*(n-1)) / n
+			children := make([]layout.FlexChild, 0, 2*n)
+			for i, col := range cols {
+				if i > 0 {
+					children = append(children, kit.Rigid(kit.Gap(kit.Space3, 0)))
 				}
-				return kit.Flex{Axis: layout.Vertical, Gap: kit.Space3}.Layout(gtx, th, children...)
-			})
+				children = append(children, kit.Rigid(func(gtx C) D {
+					gtx.Constraints.Min.X, gtx.Constraints.Max.X = colW, colW
+					cards := make([]layout.FlexChild, len(col))
+					for j, s := range col {
+						cards[j] = kit.Rigid(func(gtx C) D { return v.card(gtx, o, s) })
+					}
+					return kit.Flex{Axis: layout.Vertical, Gap: kit.Space3}.Layout(gtx, th, cards...)
+				}))
+			}
+			return layout.Flex{Alignment: layout.Start}.Layout(gtx, children...)
 		})
+	})
+}
+
+// pack deals sections into n columns, each to the currently shortest, by
+// row count. Order is kept within a column, so reading order holds.
+func pack(ss []section, k scrcpy.Kind, n int) [][]section {
+	cols := make([][]section, n)
+	h := make([]int, n)
+	for _, s := range ss {
+		rows := 2 // title and padding
+		for _, it := range s.items {
+			if it.shown(k) {
+				rows++
+			}
+		}
+		c := 0
+		for i := range h {
+			if h[i] < h[c] {
+				c = i
+			}
+		}
+		cols[c] = append(cols[c], s)
+		h[c] += rows
+	}
+	return cols
+}
+
+func (v *View) card(gtx C, o *scrcpy.Options, s section) D {
+	th := v.Theme
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	reason := ""
+	if s.disabled != nil {
+		reason = s.disabled(o)
+	}
+	return th.Card(gtx, func(gtx C) D {
+		children := []layout.FlexChild{kit.Rigid(func(gtx C) D {
+			return kit.Row(gtx,
+				kit.Rigid(func(gtx C) D { return th.Caption(gtx, s.title) }),
+				kit.Flexed(1, kit.Grow),
+				kit.Rigid(func(gtx C) D { return th.Text(gtx, reason, th.Type.Small, th.Dim, kit.Regular) }),
+			)
+		})}
+		for _, it := range s.items {
+			if !it.shown(o.Kind) {
+				continue
+			}
+			locked := reason != "" || (o.ReadOnly && o.Kind != scrcpy.OTG && readOnlyLocks(it.id))
+			children = append(children, kit.Rigid(func(gtx C) D {
+				return th.Disable(gtx, locked, func(gtx C) D { return v.item(gtx, o, it) })
+			}))
+		}
+		return kit.Flex{Axis: layout.Vertical, Gap: kit.Space3}.Layout(gtx, th, children...)
 	})
 }
 
@@ -392,19 +460,30 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 			return d
 		}
 	}
+	label := func(gtx C) D {
+		return kit.Col(gtx,
+			kit.Rigid(func(gtx C) D { return th.Text(gtx, it.label, th.Type.Body, th.Fg, kit.Regular) }),
+			kit.Rigid(func(gtx C) D {
+				if it.hint == "" {
+					return D{}
+				}
+				return th.Text(gtx, it.hint, th.Type.Small, th.Dim, kit.Regular)
+			}),
+		)
+	}
+	if gtx.Constraints.Max.X < gtx.Dp(stackBelow) { // narrow card: label above a full-width control
+		return kit.Flex{Axis: layout.Vertical, Gap: kit.Space1p5}.Layout(gtx, v.Theme,
+			kit.Rigid(label),
+			kit.Rigid(kit.Stretch(control)),
+		)
+	}
+	w := min(gtx.Dp(controlMaxW), gtx.Constraints.Max.X/2)
 	return kit.Row(gtx,
-		kit.Flexed(1, func(gtx C) D {
-			return kit.Col(gtx,
-				kit.Rigid(func(gtx C) D { return th.Text(gtx, it.label, th.Type.Body, th.Fg, kit.Regular) }),
-				kit.Rigid(func(gtx C) D {
-					if it.hint == "" {
-						return D{}
-					}
-					return th.Text(gtx, it.hint, th.Type.Small, th.Dim, kit.Regular)
-				}),
-			)
+		kit.Flexed(1, label),
+		kit.Rigid(func(gtx C) D {
+			gtx.Constraints.Min.X, gtx.Constraints.Max.X = w, w
+			return control(gtx)
 		}),
-		kit.Rigid(kit.Fixed(280, control)),
 	)
 }
 

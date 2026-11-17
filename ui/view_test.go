@@ -72,3 +72,52 @@ func shot(t *testing.T, h *kittest.Harness, name string) {
 		t.Fatal(err)
 	}
 }
+
+// TestResponsive checks the settings grid's column count at common window
+// sizes, by whether Video's and Audio's controls share a column.
+func TestResponsive(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		w, h int
+		cols int
+	}{
+		{"narrow", 720, 900, 1},
+		{"laptop", 1280, 800, 2},
+		{"16x9", 1920, 1080, 3},
+	} {
+		v := New(nil)
+		v.SetDevices(fixture)
+		h := kittest.NewT(t, c.w, c.h, v.Frame)
+		h.Theme = v.Theme
+		shot(t, h, "size-"+c.name)
+		xs := map[int]bool{}
+		for _, id := range []string{"max-size/field", "audio-source/field", "keyboard/field"} {
+			r, ok := h.Find(id)
+			if !ok {
+				t.Fatalf("%s: %s not on screen", c.name, id)
+			}
+			xs[r.Min.X] = true
+		}
+		if len(xs) != c.cols {
+			t.Errorf("%s: %d columns, want %d", c.name, len(xs), c.cols)
+		}
+		h.ExpectClean()
+	}
+}
+
+func TestNarrowKindDropdown(t *testing.T) {
+	v := New(nil)
+	v.SetDevices(fixture)
+	h := kittest.NewT(t, 640, 800, v.Frame)
+	h.Theme = v.Theme
+	if _, ok := h.Find("kind/Mirror"); ok {
+		t.Fatal("tabs should give way to the dropdown when narrow")
+	}
+	h.ClickID("kind-select/field")
+	h.ClickID("kind-select/3")
+	if v.options().Kind != scrcpy.AudioOnly {
+		t.Fatalf("kind = %v", v.options().Kind)
+	}
+	h.ExpectClean()
+	shot(t, h, "size-phone")
+}
