@@ -169,3 +169,23 @@ func TestDeviceNames(t *testing.T) {
 	h.ExpectClean()
 	shot(t, h, "unauthorized")
 }
+
+func TestBitRateStops(t *testing.T) {
+	var o scrcpy.Options // 8M: stop 2 of 0..5, value 0.4
+	setBitRate(&o, 0.45, false) // one key press right
+	if o.BitRate != 16_000_000 {
+		t.Fatalf("key right from 8M: %d", o.BitRate)
+	}
+	setBitRate(&o, 0.55, false) // one key press left from 0.6
+	if o.BitRate != 0 {
+		t.Fatalf("key left back to 8M: %d (want 0, the default)", o.BitRate)
+	}
+	setBitRate(&o, 0.41, true) // a tiny drag does not jump
+	if o.BitRate != 0 {
+		t.Fatalf("tiny drag moved to %d", o.BitRate)
+	}
+	setBitRate(&o, 1, true)
+	if o.BitRate != 64_000_000 {
+		t.Fatalf("drag to the end: %d", o.BitRate)
+	}
+}

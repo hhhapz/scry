@@ -12,6 +12,7 @@ require (
 	gioui.org/x v0.10.3 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/hhhapz/giokit/media v0.0.0
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.26.0 // indirect
@@ -24,3 +25,5 @@ replace (
 	gioui.org => ../giokit/third_party/gioui.org
 	github.com/hhhapz/giokit => ../giokit
 )
+
+replace github.com/hhhapz/giokit/media => ../giokit/media

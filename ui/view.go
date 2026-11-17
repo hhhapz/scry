@@ -45,7 +45,7 @@ type View struct {
 	kind     kit.Tabs
 	kindSel  kit.Select // replaces the tabs when they do not fit
 	fps      kit.Tabs
-	bitrate  kit.Slider
+	bitrate  ui.SliderState
 	appName  widget.Editor
 	toggles  kit.Pool[kit.Clickable]
 	selects  kit.Pool[kit.Select]
@@ -190,6 +190,9 @@ func (v *View) handle(gtx C) {
 	}
 	if i, ok := v.fps.Clicked(gtx); ok {
 		o.MaxFPS = fpsVals[i]
+	}
+	if val, ok := v.bitrate.Update(gtx); ok {
+		setBitRate(o, val, v.bitrate.Dragging())
 	}
 	for _, s := range sections {
 		if !s.shown(o.Kind) {
@@ -506,7 +509,7 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 	th := v.Theme
 	if it.toggle != nil {
 		on := *it.toggle(o) != it.invert
-		return th.Switch(gtx, v.toggles.Get(it.id), it.id, it.label, on)
+		return ui.Switch{ID: it.id, Label: it.label, On: on}.Layout(gtx, th, v.toggles.Get(it.id))
 	}
 	var control kit.W
 	switch {
@@ -528,7 +531,7 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 		control = func(gtx C) D { return v.bitrateControl(gtx, o) }
 	case it.custom == "app":
 		control = func(gtx C) D {
-			d := th.TextField(gtx, &v.appName, it.id, "org.mozilla.firefox")
+			d := ui.TextField{ID: it.id, Placeholder: "org.mozilla.firefox", Label: it.label}.Layout(gtx, th, &v.appName)
 			o.StartApp = strings.TrimSpace(v.appName.Text()) // after the editor took this frame's keys
 			return d
 		}
@@ -560,36 +563,48 @@ func (v *View) item(gtx C, o *scrcpy.Options, it item) D {
 	)
 }
 
+// bitIndex is the bit-rate stop o uses (scrcpy's 8M default when unset).
+func bitIndex(o *scrcpy.Options) int {
+	for i, r := range bitRates {
+		if r == o.BitRate {
+			return i
+		}
+	}
+	return 2
+}
+
+// setBitRate applies a slider value: the nearest stop, except that a small
+// step (a key press: 5%) that would round back to the current stop moves
+// to its neighbour, so the keyboard can reach every stop.
+func setBitRate(o *scrcpy.Options, v float32, dragging bool) {
+	n := len(bitRates) - 1
+	cur := bitIndex(o)
+	i := int(v*float32(n) + 0.5)
+	if d := v - float32(cur)/float32(n); i == cur && !dragging && d != 0 && d > -0.06 && d < 0.06 {
+		if d > 0 {
+			i++
+		} else {
+			i--
+		}
+	}
+	r := bitRates[max(0, min(n, i))]
+	if r == 8_000_000 {
+		r = 0 // scrcpy's default: leave the flag out
+	}
+	o.BitRate = r
+}
+
 // bitrateControl is a slider over fixed stops with the value beside it.
 func (v *View) bitrateControl(gtx C, o *scrcpy.Options) D {
 	th := v.Theme
-	stop := func(f float32) int { return int(f*float32(len(bitRates)-1) + 0.5) }
-	cur := 2 // 8M, scrcpy's default
-	for i, r := range bitRates {
-		if r == o.BitRate {
-			cur = i
-		}
-	}
-	if stop(v.bitrate.Value) != cur { // another device, or first frame
-		v.bitrate.Value = float32(cur) / float32(len(bitRates)-1)
-	}
+	value := float32(bitIndex(o)) / float32(len(bitRates)-1)
 	return kit.Row(gtx,
 		kit.Flexed(1, func(gtx C) D {
-			d := th.Slider(gtx, &v.bitrate, "bitrate")
-			r := bitRates[stop(v.bitrate.Value)]
-			if r == 8_000_000 {
-				r = 0 // scrcpy's default: leave the flag out
-			}
-			o.BitRate = r
-			return d
+			return ui.Slider{ID: "bitrate", Label: "Bit rate", Value: value}.Layout(gtx, th, &v.bitrate)
 		}),
 		kit.Rigid(kit.Gap(12, 0)),
 		kit.Rigid(kit.Fixed(64, func(gtx C) D {
-			r := o.BitRate
-			if r == 0 {
-				r = 8_000_000
-			}
-			return th.Text(gtx, scrcpy.Rate(r)+"bps", th.Type.Body, th.Muted, kit.Medium)
+			return th.Text(gtx, scrcpy.Rate(bitRates[bitIndex(o)])+"bps", th.Type.Body, th.Muted, kit.Medium)
 		})),
 	)
 }

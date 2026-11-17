@@ -114,7 +114,7 @@ func (v *View) logsLayout(gtx C) D {
 			return layout.Inset{Top: 12, Bottom: 12, Left: 24, Right: 24}.Layout(gtx, func(gtx C) D {
 				return kit.Row(gtx,
 					kit.Flexed(1, func(gtx C) D {
-						d := th.TextField(gtx, &p.filter, "log-filter", "Filter logs")
+						d := ui.TextField{ID: "log-filter", Placeholder: "Filter logs", Icon: kit.IconSearch}.Layout(gtx, th, &p.filter)
 						p.view.Filter = p.filter.Text() // after the editor took this frame's keys
 						return d
 					}),
@@ -150,7 +150,7 @@ func (v *View) logsLayout(gtx C) D {
 					}),
 					kit.Rigid(kit.Gap(kit.Space2, 0)),
 					kit.Flexed(1, func(gtx C) D {
-						return th.TextField(gtx, &p.console, "adb-command", "shell getprop ro.build.version.release")
+						return ui.TextField{ID: "adb-command", Placeholder: "shell getprop ro.build.version.release", Label: "adb command"}.Layout(gtx, th, &p.console)
 					}),
 					kit.Rigid(kit.Gap(kit.Space2, 0)),
 					kit.Rigid(func(gtx C) D {
