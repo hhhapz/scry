@@ -20,6 +20,7 @@ var fixture = []adb.Device{
 func harness(t *testing.T) (*View, *kittest.Harness) {
 	v := New(nil)
 	v.SetDevices(fixture)
+	v.info[fixture[0].Serial] = adb.Info{Name: "mira", Retail: "Galaxy Tab S9 Ultra", Manufacturer: "samsung", Model: "SM-X910", Android: "16"}
 	h := kittest.NewT(t, 1100, 1300, v.Frame) // tall: every section on screen
 	h.Theme = v.Theme
 	return v, h
@@ -153,4 +154,18 @@ func TestLogs(t *testing.T) {
 	}
 	h.ExpectClean()
 	shot(t, h, "logs")
+}
+
+func TestDeviceNames(t *testing.T) {
+	_, h := harness(t)
+	h.ExpectTextIn("device:"+fixture[0].Serial, "mira")
+	if _, ok := h.FindText("Galaxy Tab S9 Ultra · Android 16 · Wi-Fi 192.168.0.241:43629"); !ok {
+		t.Fatal("header subtitle missing")
+	}
+	h.ClickID("device:" + fixture[1].Serial)
+	if _, ok := h.FindText("Unauthorized: accept the USB debugging prompt on the device"); !ok {
+		t.Fatal("unauthorized hint missing")
+	}
+	h.ExpectClean()
+	shot(t, h, "unauthorized")
 }

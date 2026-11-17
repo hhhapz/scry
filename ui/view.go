@@ -4,8 +4,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"gioui.org/layout"
 	"gioui.org/widget"
@@ -31,6 +33,7 @@ type View struct {
 	selected string                     // serial
 	opts     map[string]*scrcpy.Options // per device
 	sessions map[string]*scrcpy.Session
+	info     map[string]adb.Info // what each authorized device said about itself
 	status   string
 
 	// widget state
@@ -59,6 +62,7 @@ func New(app *kit.App) *View {
 	v := &View{Theme: th, app: app,
 		opts:     map[string]*scrcpy.Options{},
 		sessions: map[string]*scrcpy.Session{},
+		info:     map[string]adb.Info{},
 	}
 	v.kind.Style = kit.TabsSegmented
 	v.fps.Style = kit.TabsSegmented
@@ -90,7 +94,26 @@ func (v *View) SetDevices(ds []adb.Device) {
 	if v.device() == nil && len(ds) > 0 {
 		v.selectDevice(ds[0].Serial)
 	}
+	for _, d := range ds {
+		if _, ok := v.info[d.Serial]; ok || d.State != "device" || v.app == nil {
+			continue
+		}
+		serial := d.Serial
+		kit.Spawn(v.app, func(ctx context.Context) (adb.Info, error) {
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			return adb.DeviceInfo(ctx, serial)
+		}, func(i adb.Info, err error) {
+			if err == nil {
+				v.info[serial] = i
+			}
+		})
+	}
 }
+
+// title and subtitle name a device as nicely as what we know allows.
+func (v *View) title(d adb.Device) string    { return adb.Title(d, v.info[d.Serial]) }
+func (v *View) subtitle(d adb.Device) string { return adb.Subtitle(d, v.info[d.Serial]) }
 
 func (v *View) device() *adb.Device {
 	for i := range v.devices {
@@ -276,7 +299,7 @@ func (v *View) sidebar(gtx C) D {
 							} else if d.State != "device" {
 								trailing, tc = d.State, th.Warn
 							}
-							return th.NavItem(gtx, v.nav.Get(d.Serial), "device:"+d.Serial, d.Name(), trailing, tc, d.Serial == v.selected)
+							return th.NavItem(gtx, v.nav.Get(d.Serial), "device:"+d.Serial, v.title(d), trailing, tc, d.Serial == v.selected)
 						})
 					}
 					return kit.Col(gtx, children...)
@@ -343,10 +366,13 @@ func (v *View) header(gtx C, d *adb.Device) D {
 	}
 	return layout.Inset{Top: 20, Bottom: 14, Left: 24, Right: 24}.Layout(gtx, func(gtx C) D {
 		return kit.Row(gtx,
-			kit.Rigid(func(gtx C) D { return th.Heading(gtx, d.Name()) }),
-			kit.Rigid(kit.Gap(12, 0)),
-			kit.Rigid(func(gtx C) D { return th.Text(gtx, d.Serial, th.Type.Small, th.Dim, kit.Regular) }),
-			kit.Flexed(1, kit.Grow),
+			kit.Flexed(1, func(gtx C) D {
+				return kit.Col(gtx,
+					kit.Rigid(func(gtx C) D { return th.Heading(gtx, v.title(*d)) }),
+					kit.Rigid(kit.Gap(0, kit.Space1)),
+					kit.Rigid(func(gtx C) D { return v.deviceLine(gtx, *d) }),
+				)
+			}),
 			kit.Rigid(func(gtx C) D { return th.Tabs(gtx, &v.tabs, "page", []string{"Settings", "Logs"}, v.tab) }),
 			kit.Rigid(kit.Gap(kit.Space4, 0)),
 			kit.Rigid(func(gtx C) D {
@@ -356,6 +382,28 @@ func (v *View) header(gtx C, d *adb.Device) D {
 			}),
 		)
 	})
+}
+
+// deviceLine is the header's second line: hardware, connection, or what
+// the user has to do before the device is usable.
+func (v *View) deviceLine(gtx C, d adb.Device) D {
+	th := v.Theme
+	switch d.State {
+	case "device":
+	case "unauthorized":
+		return th.Text(gtx, "Unauthorized: accept the USB debugging prompt on the device", th.Type.Small, th.Warn, kit.Regular)
+	default:
+		return th.Text(gtx, "Device is "+d.State, th.Type.Small, th.Warn, kit.Regular)
+	}
+	conn := "USB"
+	if d.Wireless() {
+		conn = "Wi-Fi"
+	}
+	parts := []string{conn + " " + d.Serial}
+	if sub := v.subtitle(d); sub != "" {
+		parts = append([]string{sub}, parts...)
+	}
+	return th.Text(gtx, strings.Join(parts, " · "), th.Type.Small, th.Muted, kit.Regular)
 }
 
 // Responsive breakpoints for the settings grid and its rows.
